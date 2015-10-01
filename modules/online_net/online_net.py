@@ -46,6 +46,8 @@ options:
   rpn_groups:
     description:
      - List, the Online.net RPN groups to have the server part of.
+  rescue_images:
+     - Boolean, set to True in order to get the list of rescue images
   restart:
     description:
      - Boolean, set to True in order to restart the server
@@ -172,6 +174,9 @@ class Server(JsonfyMixIn):
 
         return sync_success
 
+    def rescue_images(self):
+        return self.api('server/rescue_images/' + str(self.id))
+
     @classmethod
     def find(cls, server_id=None):
         if not server_id:
@@ -222,6 +227,7 @@ def core(module):
     state = module.params['state']
     hostname = module.params['hostname']
     rpn_groups = module.params['rpn_groups']
+    rescue_images = module.params['rescue_images']
     restart = module.params['restart']
 
     # First, try to find a server by id.
@@ -245,6 +251,9 @@ def core(module):
         if rpn_groups:
             output.append({'rpn_groups': server.rpn_groups(rpn_groups)})
 
+        if rescue_images:
+            output.append({'rescue_images': server.rescue_images()})
+
         if restart:
             output.append({'restart': server.restart()})
 
@@ -260,6 +269,7 @@ def main():
             id=dict(alias=['server_id'], type='int', required=True),
             hostname=dict(type='str'),
             rpn_groups=dict(type='list'),
+            rescue_images=dict(type='bool', default='no'),
             restart=dict(type='bool', default='no')
         )
     )
