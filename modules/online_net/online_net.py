@@ -128,7 +128,7 @@ class Server(JsonfyMixIn):
 
     def reboot(self, mode):
         if mode == 'normal':
-            if self.api('server/reboot/' + str(self.id), dict(reason='Reboot by Ansible plugin')):
+            if self.api('server/reboot/' + str(self.id), dict(reason='Rebooted by Ansible plugin')):
                 self.changed = True
                 return True
             else:
