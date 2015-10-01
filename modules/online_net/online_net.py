@@ -224,7 +224,7 @@ def core(module):
     rpn_groups = module.params['rpn_groups']
     restart = module.params['restart']
 
-    # First, try to find a droplet by id.
+    # First, try to find a server by id.
     Server.setup(api_uri, api_token)
     server = Server.find(server_id)
 
