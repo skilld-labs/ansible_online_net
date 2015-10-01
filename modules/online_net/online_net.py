@@ -1,6 +1,9 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-
+######################################################################
+# (c) 2015, Jean-Baptiste Guerraz <jbguerraz@gmail.com>,
+#           Andrey Postnikov <apostnikov@gmail.com>
+#
 # This file is part of Ansible
 #
 # Ansible is free software: you can redistribute it and/or modify
@@ -15,6 +18,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
+
 DOCUMENTATION = '''
 ---
 module: online_net
