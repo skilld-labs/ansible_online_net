@@ -47,6 +47,10 @@ options:
      - List, the Online.net RPN groups to have the server part of.
   rescue_images:
      - Boolean, set to True in order to get the list of rescue images
+  bmc:
+     - String, the IP address to authorize for the BMC session
+  bmc_close:
+     - String, the key of the BMC session to close
   reboot:
     description:
      - String, set to 'normal' in order to reboot the server or set to 'rescue-[RESCUE_IMAGE]' in order to reboot the server in rescue mode
@@ -104,27 +108,27 @@ class Server(JsonfyMixIn):
     def has_changed(self):
         return self.changed
 
-    def power_on(self):
-        if self.power == 'OFF':
-            if self.api('server/boot/normal/' + str(self.id), dict(reason='Started by Ansible plugin')):
-                self.power = 'ON'
-                self.changed = True
-                return True
+    def _power(self, state):
+        if state == 'on':
+            if self.power == 'OFF':
+                if self.api('server/boot/normal/' + str(self.id), dict(reason='Started by Ansible plugin')):
+                    self.power = 'ON'
+                    self.changed = True
+                    return True
+                else:
+                    return False
             else:
                 return False
         else:
-            return False
-
-    def power_off(self):
-        if self.power == 'ON':
-            if self.api('server/shutdown/' + str(self.id), dict(reason='Shutted down by Ansible plugin')):
-                self.power = 'OFF'
-                self.changed = True
-                return True
+            if self.power == 'ON':
+                if self.api('server/shutdown/' + str(self.id), dict(reason='Shutted down by Ansible plugin')):
+                    self.power = 'OFF'
+                    self.changed = True
+                    return True
+                else:
+                    return False
             else:
                 return False
-        else:
-            return False
 
     def reboot(self, mode):
         if mode == 'normal':
@@ -182,6 +186,23 @@ class Server(JsonfyMixIn):
     def rescue_images(self):
         return self.api('server/rescue_images/' + str(self.id))
 
+    def _bmc(self, ip):
+        session_key =  self.api('server/bmc/session', dict(server_id=self.id, ip=ip))
+        authentication = False
+        while not authentication:
+            authentication = self.api('server/bmc/session/' + session_key)
+            if authentication:
+                authentication['session_key'] = session_key
+                break
+            else:
+                time.sleep(1)
+        self.changed = True
+        return authentication
+
+    def bmc_close(self, session_key):
+        self.bmc['session_key'] = None
+        return self.api('server/bmc/session/' + str(session_key), dict(bmc='close'), 'DELETE')
+
     @classmethod
     def find(cls, server_id=None):
         if not server_id:
@@ -214,7 +235,7 @@ class Server(JsonfyMixIn):
             resp, content = h.request(cls.api_uri + command, headers=headers)
 
         resp['status'] = int(resp['status'])
-        if resp['status'] == 200:
+        if resp['status'] in range(200,204):
             return json.loads(unicode(content.decode('raw_unicode_escape')))
         else:
             return None
@@ -233,6 +254,8 @@ def core(module):
     hostname = module.params['hostname']
     rpn_groups = module.params['rpn_groups']
     rescue_images = module.params['rescue_images']
+    bmc = module.params['bmc']
+    bmc_close = module.params['bmc_close']
     reboot = module.params['reboot']
 
     # First, try to find a server by id.
@@ -245,10 +268,8 @@ def core(module):
     else:
         output = []
 
-        if power == 'on':
-            output.append({'power': server.power_on()})
-        elif power == 'off':
-            output.append({'power': server.power_off()})
+        if power:
+            output.append({'power': server._power(power)})
 
         if hostname:
             output.append({'hostname': server.name(hostname)})
@@ -258,6 +279,12 @@ def core(module):
 
         if rescue_images:
             output.append({'rescue_images': server.rescue_images()})
+
+        if bmc:
+            output.append({'bmc': server._bmc(bmc)})
+
+        if bmc_close:
+            output.append({'bmc_close': server.bmc_close(bmc_close)})
 
         if reboot:
             output.append({'reboot': server.reboot(reboot)})
@@ -275,6 +302,8 @@ def main():
             hostname=dict(type='str'),
             rpn_groups=dict(type='list'),
             rescue_images=dict(type='bool', default='no'),
+            bmc=dict(type='str'),
+            bmc_close=dict(type='str'),
             reboot=dict(type='str')
         )
     )
