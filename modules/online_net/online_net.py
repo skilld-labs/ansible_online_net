@@ -50,7 +50,7 @@ options:
      - Boolean, set to True in order to get the list of rescue images
   restart:
     description:
-     - Boolean, set to True in order to restart the server
+     - String, set to 'normal' in order to restart the server or set to 'rescue-[RESCUE_IMAGE]' in order to restart the server in rescue mode
 
 notes:
   - Two environment variables can be used, ONLINE_NET_API_URI and ONLINE_NET_API_TOKEN.
@@ -66,7 +66,7 @@ EXAMPLES = '''
 
 - online_net: >
       id=1337
-      restart=True
+      restart='normal'
 
 # Add a server to few RPN groups
 # Add the given server to the given group
@@ -75,7 +75,7 @@ EXAMPLES = '''
 - online_net: >
       id=1337
       rpn_groups=ThePrivateGroup,TheOtherPrivateGroup
-      restart=True
+      restart='normal'
 '''
 
 try:
@@ -127,10 +127,16 @@ class Server(JsonfyMixIn):
         else:
             return False
 
-    def restart(self):
-        if self.api('server/reboot/' + str(self.id), dict(reason='Restarted by Ansible plugin')):
+    def restart(self, mode):
+        if mode == 'normal':
+            if self.api('server/reboot/' + str(self.id), dict(reason='Restarted by Ansible plugin')):
+                self.changed = True
+                return True
+            else:
+                return False
+        elif 'rescue' in mode:
             self.changed = True
-            return True
+            return self.api('server/boot/rescue/' + str(self.id), dict(image=mode.replace('rescue-', '', 1)))
         else:
             return False
 
@@ -255,7 +261,7 @@ def core(module):
             output.append({'rescue_images': server.rescue_images()})
 
         if restart:
-            output.append({'restart': server.restart()})
+            output.append({'restart': server.restart(restart)})
 
         module.exit_json(changed=server.has_changed(), server=server.to_json(), output=json.dumps(output))
 
@@ -270,7 +276,7 @@ def main():
             hostname=dict(type='str'),
             rpn_groups=dict(type='list'),
             rescue_images=dict(type='bool', default='no'),
-            restart=dict(type='bool', default='no')
+            restart=dict(type='str')
         )
     )
 
