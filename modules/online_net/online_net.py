@@ -23,10 +23,9 @@ description:
      - 
 version_added: "1.0"
 options:
-  state:
+  power:
     description:
-     - Indicate desired state of the target.
-    default: 'on'
+     - Indicate desired state of the target power.
     choices: ['on', 'off']
   api_uri:
     description:
@@ -48,9 +47,9 @@ options:
      - List, the Online.net RPN groups to have the server part of.
   rescue_images:
      - Boolean, set to True in order to get the list of rescue images
-  restart:
+  reboot:
     description:
-     - String, set to 'normal' in order to restart the server or set to 'rescue-[RESCUE_IMAGE]' in order to restart the server in rescue mode
+     - String, set to 'normal' in order to reboot the server or set to 'rescue-[RESCUE_IMAGE]' in order to reboot the server in rescue mode
 
 notes:
   - Two environment variables can be used, ONLINE_NET_API_URI and ONLINE_NET_API_TOKEN.
@@ -61,12 +60,12 @@ requirements:
 
 
 EXAMPLES = '''
-# Restart a server
-# Restart the given server (id=1337)
+# Reboot a server
+# Reboot the given server (id=1337)
 
 - online_net: >
       id=1337
-      restart='normal'
+      reboot='normal'
 
 # Add a server to few RPN groups
 # Add the given server to the given group
@@ -75,7 +74,7 @@ EXAMPLES = '''
 - online_net: >
       id=1337
       rpn_groups=ThePrivateGroup,TheOtherPrivateGroup
-      restart='normal'
+      reboot='normal'
 '''
 
 try:
@@ -107,7 +106,7 @@ class Server(JsonfyMixIn):
 
     def power_on(self):
         if self.power == 'OFF':
-            if self.api('server/reboot/' + str(self.id), dict(reason='Started by Ansible plugin')):
+            if self.api('server/boot/normal/' + str(self.id), dict(reason='Started by Ansible plugin')):
                 self.power = 'ON'
                 self.changed = True
                 return True
@@ -127,9 +126,9 @@ class Server(JsonfyMixIn):
         else:
             return False
 
-    def restart(self, mode):
+    def reboot(self, mode):
         if mode == 'normal':
-            if self.api('server/reboot/' + str(self.id), dict(reason='Restarted by Ansible plugin')):
+            if self.api('server/reboot/' + str(self.id), dict(reason='Reboot by Ansible plugin')):
                 self.changed = True
                 return True
             else:
@@ -230,11 +229,11 @@ def core(module):
     except KeyError, e:
         module.fail_json(msg='Unable to load %s' % e.message)
 
-    state = module.params['state']
+    power = module.params['power']
     hostname = module.params['hostname']
     rpn_groups = module.params['rpn_groups']
     rescue_images = module.params['rescue_images']
-    restart = module.params['restart']
+    reboot = module.params['reboot']
 
     # First, try to find a server by id.
     Server.setup(api_uri, api_token)
@@ -246,10 +245,10 @@ def core(module):
     else:
         output = []
 
-        if state == 'on':
-            output.append({'state': server.power_on()})
-        elif state == 'off':
-            output.append({'state': server.power_off()})
+        if power == 'on':
+            output.append({'power': server.power_on()})
+        elif power == 'off':
+            output.append({'power': server.power_off()})
 
         if hostname:
             output.append({'hostname': server.name(hostname)})
@@ -260,8 +259,8 @@ def core(module):
         if rescue_images:
             output.append({'rescue_images': server.rescue_images()})
 
-        if restart:
-            output.append({'restart': server.restart(restart)})
+        if reboot:
+            output.append({'reboot': server.reboot(reboot)})
 
         module.exit_json(changed=server.has_changed(), server=server.to_json(), output=json.dumps(output))
 
@@ -269,14 +268,14 @@ def core(module):
 def main():
     module = AnsibleModule(
         argument_spec=dict(
-            state=dict(choices=['on', 'off']),
+            power=dict(choices=['on', 'off']),
             api_uri=dict(aliases=['API_URI'], default='https://api.online.net/api/v1/', no_log=True),
             api_token=dict(aliases=['API_TOKEN'], no_log=True, required=True),
             id=dict(alias=['server_id'], type='int', required=True),
             hostname=dict(type='str'),
             rpn_groups=dict(type='list'),
             rescue_images=dict(type='bool', default='no'),
-            restart=dict(type='str')
+            reboot=dict(type='str')
         )
     )
 
