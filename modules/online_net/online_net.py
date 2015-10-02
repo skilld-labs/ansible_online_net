@@ -39,7 +39,7 @@ options:
     description:
      - Indicate desired state of the server.
     choices: ['on', 'off', 'reboot']
-  reboot_mode:
+  boot_mode:
     description:
      - String, set to 'rescue-[RESCUE_IMAGE]' in order to reboot the server in rescue mode; set to 'normal' (default) for a simple reboot
   rescue_images:
@@ -135,19 +135,12 @@ class Server(JsonfyMixIn):
             else:
                 return False
         elif state == 'reboot':
-            if self.rescue_image:
-                self.changed = self.api('server/boot/rescue/' + str(self.id), dict(image=self.rescue_image))
+            if 'rescue' in self.boot_mode:
+                self.changed = self.api('server/boot/rescue/' + str(self.id), dict(image=self.boot_mode.replace('rescue-', '', 1)))
                 return self.changed
             else:
                 self.changed = self.api('server/reboot/' + str(self.id), dict(reason='Rebooted by Ansible plugin'))
                 return self.changed
-        else:
-            return False
-
-    def reboot_mode(self, mode):
-        if 'rescue' in mode:
-            self.rescue_image = mode.replace('rescue-', '', 1)
-            return True
         else:
             return False
 
@@ -259,7 +252,7 @@ def core(module):
         module.fail_json(msg='Unable to load %s' % e.message)
 
     state = module.params['state']
-    reboot_mode = module.params['reboot_mode']
+    boot_mode = module.params['boot_mode']
     hostname = module.params['hostname']
     rpn_groups = module.params['rpn_groups']
     rescue_images = module.params['rescue_images']
@@ -291,8 +284,8 @@ def core(module):
         if bmc_close:
             output.append({'bmc_close': server.bmc_close(bmc_close)})
 
-        if reboot_mode:
-            output.append({'reboot_mode': server.reboot_mode(reboot_mode)})
+        if boot_mode:
+            server.boot_mode = boot_mode
 
         if state:
             output.append({'state': server.state(state)})
@@ -307,7 +300,7 @@ def main():
             api_token=dict(aliases=['API_TOKEN'], no_log=True, required=True),
             id=dict(alias=['server_id'], type='int', required=True),
             state=dict(choices=['on', 'off', 'reboot']),
-            reboot_mode=dict(type='str'),
+            boot_mode=dict(type='str', default='normal'),
             hostname=dict(type='str'),
             rpn_groups=dict(type='list'),
             rescue_images=dict(type='bool', default='no'),
