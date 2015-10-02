@@ -27,10 +27,6 @@ description:
      - 
 version_added: "1.0"
 options:
-  power:
-    description:
-     - Indicate desired state of the target power.
-    choices: ['on', 'off']
   api_uri:
     description:
      - String, Online.net API URI
@@ -39,6 +35,15 @@ options:
     description:
      - String, Online.net API token.
     required: true
+  state:
+    description:
+     - Indicate desired state of the server.
+    choices: ['on', 'off', 'reboot']
+  reboot_mode:
+    description:
+     - String, set to 'rescue-[RESCUE_IMAGE]' in order to reboot the server in rescue mode; set to 'normal' (default) for a simple reboot
+  rescue_images:
+     - Boolean, set to True in order to get the list of rescue images
   id:
     description:
      - Numeric, the server id you want to operate on.
@@ -49,15 +54,10 @@ options:
   rpn_groups:
     description:
      - List, the Online.net RPN groups to have the server part of.
-  rescue_images:
-     - Boolean, set to True in order to get the list of rescue images
   bmc:
      - String, the IP address to authorize for the BMC session
   bmc_close:
      - String, the key of the BMC session to close
-  reboot:
-    description:
-     - String, set to 'normal' in order to reboot the server or set to 'rescue-[RESCUE_IMAGE]' in order to reboot the server in rescue mode
 
 notes:
   - Two environment variables can be used, ONLINE_NET_API_URI and ONLINE_NET_API_TOKEN.
@@ -73,7 +73,7 @@ EXAMPLES = '''
 
 - online_net: >
       id=1337
-      reboot='normal'
+      state='reboot'
 
 # Add a server to few RPN groups
 # Add the given server to the given group
@@ -82,7 +82,7 @@ EXAMPLES = '''
 - online_net: >
       id=1337
       rpn_groups=ThePrivateGroup,TheOtherPrivateGroup
-      reboot='normal'
+      state='reboot'
 '''
 
 try:
@@ -107,12 +107,13 @@ class JsonfyMixIn(object):
 class Server(JsonfyMixIn):
     def __init__(self, server_json):
         self.changed = False
+        self.rescue_image = False
         self.__dict__.update(server_json)
 
     def has_changed(self):
         return self.changed
 
-    def _power(self, state):
+    def state(self, state):
         if state == 'on':
             if self.power == 'OFF':
                 if self.api('server/boot/normal/' + str(self.id), dict(reason='Started by Ansible plugin')):
@@ -123,7 +124,7 @@ class Server(JsonfyMixIn):
                     return False
             else:
                 return False
-        else:
+        elif state == 'off':
             if self.power == 'ON':
                 if self.api('server/shutdown/' + str(self.id), dict(reason='Shutted down by Ansible plugin')):
                     self.power = 'OFF'
@@ -133,17 +134,20 @@ class Server(JsonfyMixIn):
                     return False
             else:
                 return False
-
-    def reboot(self, mode):
-        if mode == 'normal':
-            if self.api('server/reboot/' + str(self.id), dict(reason='Rebooted by Ansible plugin')):
-                self.changed = True
-                return True
+        elif state == 'reboot':
+            if self.rescue_image:
+                self.changed = self.api('server/boot/rescue/' + str(self.id), dict(image=self.rescue_image))
+                return self.changed
             else:
-                return False
-        elif 'rescue' in mode:
-            self.changed = True
-            return self.api('server/boot/rescue/' + str(self.id), dict(image=mode.replace('rescue-', '', 1)))
+                self.changed = self.api('server/reboot/' + str(self.id), dict(reason='Rebooted by Ansible plugin'))
+                return self.changed
+        else:
+            return False
+
+    def reboot_mode(self, mode):
+        if 'rescue' in mode:
+            self.rescue_image = mode.replace('rescue-', '', 1)
+            return True
         else:
             return False
 
@@ -254,13 +258,13 @@ def core(module):
     except KeyError, e:
         module.fail_json(msg='Unable to load %s' % e.message)
 
-    power = module.params['power']
+    state = module.params['state']
+    reboot_mode = module.params['reboot_mode']
     hostname = module.params['hostname']
     rpn_groups = module.params['rpn_groups']
     rescue_images = module.params['rescue_images']
     bmc = module.params['bmc']
     bmc_close = module.params['bmc_close']
-    reboot = module.params['reboot']
 
     # First, try to find a server by id.
     Server.setup(api_uri, api_token)
@@ -271,9 +275,6 @@ def core(module):
         module.fail_json(msg='Unable to find the server %s' % server_id)
     else:
         output = []
-
-        if power:
-            output.append({'power': server._power(power)})
 
         if hostname:
             output.append({'hostname': server.name(hostname)})
@@ -290,8 +291,11 @@ def core(module):
         if bmc_close:
             output.append({'bmc_close': server.bmc_close(bmc_close)})
 
-        if reboot:
-            output.append({'reboot': server.reboot(reboot)})
+        if reboot_mode:
+            output.append({'reboot_mode': server.reboot_mode(reboot_mode)})
+
+        if state:
+            output.append({'state': server.state(state)})
 
         module.exit_json(changed=server.has_changed(), server=server.to_json(), output=json.dumps(output))
 
@@ -299,16 +303,16 @@ def core(module):
 def main():
     module = AnsibleModule(
         argument_spec=dict(
-            power=dict(choices=['on', 'off']),
             api_uri=dict(aliases=['API_URI'], default='https://api.online.net/api/v1/', no_log=True),
             api_token=dict(aliases=['API_TOKEN'], no_log=True, required=True),
             id=dict(alias=['server_id'], type='int', required=True),
+            state=dict(choices=['on', 'off', 'reboot']),
+            reboot_mode=dict(type='str'),
             hostname=dict(type='str'),
             rpn_groups=dict(type='list'),
             rescue_images=dict(type='bool', default='no'),
             bmc=dict(type='str'),
-            bmc_close=dict(type='str'),
-            reboot=dict(type='str')
+            bmc_close=dict(type='str')
         )
     )
 
