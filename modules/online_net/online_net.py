@@ -189,16 +189,19 @@ class Server(JsonfyMixIn):
 
     def _bmc(self, ip):
         session_key =  self.api('server/bmc/session', dict(server_id=self.id, ip=ip))
-        authentication = False
-        while not authentication:
-            authentication = self.api('server/bmc/session/' + session_key)
-            if authentication:
-                authentication['session_key'] = session_key
-                break
-            else:
-                time.sleep(1)
-        self.changed = True
-        return authentication
+        if session_key:
+          authentication = False
+          while not authentication:
+              authentication = self.api('server/bmc/session/' + session_key)
+              if authentication:
+                  authentication['session_key'] = session_key
+                  break
+              else:
+                  time.sleep(1)
+          self.changed = True
+          return authentication
+        else:
+          return False
 
     def bmc_close(self, session_key):
         self.bmc['session_key'] = None
